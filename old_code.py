@@ -66,52 +66,7 @@ class KNMI_P13:
         with sqlite3.connect(self.dbFile) as conn:
             return pd.read_sql_query(select_query, conn, index_col = 'LocationId')
         
-    def update_data(self):
-        select_query = "SELECT * FROM KNMI_stations;"
-        qry_timestamp = 'SELECT max(Timestamp) from KNMI_data WHERE StationId = ?, Parameter = ?;'
-        qry_file_types = 'SELECT * from KNMI_file_types;'
-        qry_insert_data = 'INSERT INTO KNMI_data (StationId, Parameter, Timestamp, Value) VALUES (?,?,?,?);'
-        
-        result = []
-        with sqlite3.connect(self.dbFile) as conn:
-            stations =  pd.read_sql_query(select_query, conn, index_col = 'StationId')
-            file_types = pd.read_sql_query(qry_file_types, conn, index_col = 'FileTypeId')
-            
-            cursor = conn.cursor()
-            for StatId in stations.index:
-                
-                # find date of last entry
-                qry_lastdate = f'''SELECT date(max(Timestamp)) AS lastdate FROM KNMI_data 
-                                         WHERE StationId = {StatId} AND Parameter = "{stations.loc[StatId,'Parameter']}";
-                                '''
-                res = pd.read_sql_query(qry_lastdate,conn)
-                ts = pd.to_datetime(res.squeeze(), format = 'ISO8601')
-                
-                new_data = download_KNMI_data(stations.loc[StatId,'Url'],
-                                                  file_types.loc[stations.loc[StatId,'FileTypeId']],
-                                                  stations.loc[StatId,'Parameter'],
-                                                  ts
-                                                 )
-                n = len(new_data)
-                all_records = list(zip([StatId]*n,
-                                           stations.loc[StatId,'Parameter']*n,
-                                           new_data.index.to_julian_date(),
-                                           new_data
-                                          ))
-                    
-                try:
-                    #cursor = conn.cursor()
-                    cursor.execute("BEGIN;")
-                    cursor.executemany(qry_insert_data,all_records)
-                    conn.commit()
-                    #conn.rollback()
-                    result.append (f'{stations.loc[StatId,"Name"]}, {stations.loc[StatId,"Parameter"]}: {n} records toegevoegd.')
-                except Exception as e:
-                    conn.rollback()
-                    result.append (f'{stations.loc[StatId,"Name"]}, {stations.loc[StatId,"Parameter"]}: geen record toegevoegd.\nFout: {e}')
-                print(result)
-        return result
-                
+    
         
     def define_data(locations = 'all', startyear = 0, endyear = 0, startmonth = 4, endmonth = 9):
         
@@ -192,7 +147,6 @@ tables = ['P13_locations','locations_stations', 'KNMI_stations', 'KNMI_file_type
 
 
         
-qry_delete_table = 'DROP TABLE IF EXISTS (?);'
 drop_tables = tables.copy()
 drop_tables.append('KNMI_data')
 

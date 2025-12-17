@@ -1,18 +1,58 @@
 # knmi/downloader.py
-import requests
-import os
+import pandas as pd
 
 class KNMIDownloader:
-    def __init__(self, base_url, download_dir):
-        self.base_url = base_url
-        self.download_dir = download_dir
+    def __init__(self, db):
+        self.db = db
 
-    def download_data(self, station_id, start_date, end_date):
-        """Downloadt data van KNMI voor een station en datumrange."""
-        url = f"{self.base_url}?stns={station_id}&start={start_date}&end={end_date}"
-        response = requests.get(url)
-        response.raise_for_status()
-        file_path = os.path.join(self.download_dir, f"{station_id}_{start_date}_{end_date}.txt")
-        with open(file_path, "w") as f:
-            f.write(response.text)
-        return file_path
+    def download_KNMI_data(self, url, fdef,param,lastdate):
+        # download file and read into data frame
+        #print(fdef, type(fdef))
+        df = pd.read_table(url.strip(), 
+                           skiprows = fdef['skip_rows'], 
+                           sep = ',', low_memory = False,
+                           parse_dates = [fdef['date_column']], date_format = fdef['date_format']
+                          )
+        
+        # trim the column names
+        df = df.rename(columns = lambda x: x.strip())
+        
+        # select relevant parameter/column and convert to mm
+        df = df[[fdef['date_column'], fdef[param + '_param']]].set_index(fdef['date_column']).squeeze()
+        df = pd.to_numeric(df,errors = 'coerce') * fdef[param + '_conversion']
+        
+        # select new observations to add to the database
+        if pd.isna(lastdate):
+            df = df.loc[~pd.isna(df)]
+        else:
+            df = df.loc[df.index > lastdate]
+          
+        # return a pandas Series object
+        return df
+
+    def update_data(self):
+        
+        result = []
+        
+        stations =  self.db.get_stations()
+        file_types = self.db.get_filetypes()
+            
+        for StatId in stations.index:
+                
+            # find date of last entry
+            dmin, dmax = self.db.get_date_range(StatId, stations.loc[StatId,'Parameter'])
+            ts = pd.to_datetime(dmax, format = 'ISO8601')
+                
+            new_data = self.download_KNMI_data(stations.loc[StatId,'Url'],
+                                                  file_types.loc[stations.loc[StatId,'FileTypeId']],
+                                                  stations.loc[StatId,'Parameter'],
+                                                  ts
+                                                 )
+            
+            if self.db.add_data(StatId, stations.loc[StatId,'Parameter'] ,new_data) == 0:
+                result.append (f'{stations.loc[StatId,"Name"]}, {stations.loc[StatId,"Parameter"]}: {len(new_data)} records toegevoegd.')
+            else:
+                result.append (f'{stations.loc[StatId,"Name"]}, {stations.loc[StatId,"Parameter"]}: geen record toegevoegd.')
+            
+        return result
+                

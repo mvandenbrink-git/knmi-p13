@@ -1,5 +1,4 @@
 # knmi/processor.py
-import sqlite3
 import numpy as np
 
 class KNMIProcessor:
