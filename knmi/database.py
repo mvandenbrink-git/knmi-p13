@@ -165,6 +165,8 @@ class KNMIDatabase(KNMI_queries):
     def get_locations(self):
         
         with sqlite3.connect(self.db_path) as conn:
+            #cur = conn.cursor()
+            #cur.execute()
             return pd.read_sql_query(self.qry_locations, conn, index_col = 'LocationId')
         
     def get_stations(self):
@@ -266,7 +268,16 @@ class KNMIDatabase(KNMI_queries):
         return qry_result
 
     def get_location_timeseries(self, LocationID, Param, start_date, end_date):
+        """
+        Returns the timeseries of a parameter for a specific location
+        
+        :param LocationID: Name of the location (string)
+        :param Param: Name of the parameter ('P' or 'E')
+        :param start_date: first date of the timeseries (string of date like)
+        :param end_date: last date of the timeseries (string of date like)
 
+        :returns: pandas dataframe with a datetime-index and two columns 'Value', 'Quality'
+        """
         start = pd.to_datetime(start_date)
         end = pd.to_datetime(end_date)
 

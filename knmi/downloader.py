@@ -33,7 +33,8 @@ class KNMIDownloader:
     def update_data(self):
         
         result = []
-        
+        print('Updating database...')
+
         stations =  self.db.get_stations()
         file_types = self.db.get_filetypes()
             
