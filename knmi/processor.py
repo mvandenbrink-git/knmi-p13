@@ -1,6 +1,21 @@
 # knmi/processor.py
 import pandas as pd
 
+def cumsum_with_min(s, minimum=0):
+    sl = list(s)
+    
+    res = []
+    for i in range(len(sl)):
+        if i == 0:
+            res.append(max(minimum,sl[i]))
+        else:
+            res.append(max(minimum,sl[i] +  res[-1]))
+
+    if isinstance(s, pd.Series):
+        return pd.Series(res, index=s.index)
+    else:
+        return res
+
 class KNMIDataFilter:
     def __init__(self):
         self.locations = 'all'
@@ -36,6 +51,12 @@ class KNMIProcessor:
         self.db = db
         self.Filter = KNMIDataFilter()
 
+    def set_filter(self, locations = 'all', startyear = 0, endyear = 0, startmonth = 4, endmonth = 9):
+        self.Filter.set_filter(locations, startyear, endyear, startmonth, endmonth)
+
+    def clear_filter(self):
+        self.Filter.clear_filter()
+
     def filter_locations(self):
         locs = self.Filter.locations
         if locs == 'all':
@@ -49,11 +70,23 @@ class KNMIProcessor:
         :param bottom: bepaalt de laagst mogelijke waarde die de tijdreeks kan krijgen. De waarde 0 is gebruikelijk. Default: None
         """
 
-        df_stations = pd.DataFrame()
+        startdate = str(self.Filter.startyear) + '-01-01'
+        enddate = str(self.Filter.endyear) + '-12-31'
+        all_dates = pd.date_range(startdate, enddate, freq='D')
 
-        startdate = str(self.Filter.startyear) + '01-01'
-        enddate = str(self.Filter.endyear) + '12-31'
-
+        df_stations = pd.DataFrame({'date' : all_dates}).set_index('date')
         for loc in self.filter_locations():
+
+            df_pd = pd.DataFrame({'date' : all_dates}).set_index('date')
             Pseries = self.db.get_location_timeseries(loc,'P',startdate,enddate)
             Eseries = self.db.get_location_timeseries(loc,'E',startdate,enddate)
+            df_pd = df_pd.merge(Pseries['Value'],left_index=True, right_index= True).merge(Eseries['Value'], left_index=True, right_index=True, suffixes=('_P','_E'))
+
+            df_pd = df_pd.loc[(df_pd.index.month >= self.Filter.startmonth) & (df_pd.index.month <= self.Filter.endmonth)]
+            df_pd['pd_' + loc] = df_pd['Value_P'] - df_pd['Value_E']
+            
+            df_stations = df_stations.merge(df_pd['pd_' + loc], left_index=True, right_index=True)
+
+        df_mean = df_stations.mean(axis=1)
+
+        return df_mean.groupby(df_mean.index.year).apply(cumsum_with_min,0).droplevel(0)

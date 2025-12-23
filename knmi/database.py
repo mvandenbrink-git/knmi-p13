@@ -264,8 +264,9 @@ class KNMIDatabase(KNMI_queries):
 
         with sqlite3.connect(self.db_path) as conn:
             qry_result = pd.read_sql_query(self.qry_station_data, conn, params = (StatID, Param, start, end))
+            qry_result['date'] = pd.to_datetime(qry_result['date'], format = '%Y-%m-%d')
 
-        return qry_result
+        return qry_result.set_index('date').sort_index()
 
     def get_location_timeseries(self, LocationID, Param, start_date, end_date):
         """
@@ -288,6 +289,6 @@ class KNMIDatabase(KNMI_queries):
             result = pd.concat([result,self.get_station_timeseries(stat['StationId'],Param,
                                                                    max(start, stat['obs_from']),
                                                                    min(end,stat['obs_through']))])
-        return result.set_index('date').sort_index()
+        return result.sort_index()
 
     
