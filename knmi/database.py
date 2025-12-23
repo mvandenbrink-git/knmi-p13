@@ -286,9 +286,11 @@ class KNMIDatabase(KNMI_queries):
 
         result = pd.DataFrame()
         for i,stat in stats[stats['Parameter'] == Param].iterrows():
-            result = pd.concat([result,self.get_station_timeseries(stat['StationId'],Param,
+            res_station = self.get_station_timeseries(stat['StationId'],Param,
                                                                    max(start, stat['obs_from']),
-                                                                   min(end,stat['obs_through']))])
+                                                                   min(end,stat['obs_through']))
+            if len(res_station) != 0:
+                result = pd.concat([result,res_station])
         return result.sort_index()
 
     
