@@ -61,6 +61,10 @@ class KNMI_queries:
         '''
     
     qry_stations = "SELECT * FROM KNMI_stations;"
+    qry_station_info =  '''SELECT StationId, Name, KNMI_data.Parameter as Param, date(min(Timestamp)) AS first_date, date(max(Timestamp)) AS last_date 
+                            FROM KNMI_data INNER JOIN KNMI_stations USING (StationId)
+                            GROUP BY Param, Name;
+                     '''
     qry_stations_by_location = "SELECT StationID, Parameter, valid_from, valid_through FROM locations_stations WHERE LocationID = ?;"
     qry_locations = "SELECT * FROM P13_locations;"
     qry_date_range = '''SELECT date(min(Timestamp)) AS first_date, date(max(Timestamp)) AS last_date 
@@ -228,6 +232,34 @@ class KNMIDatabase(KNMI_queries):
         
         return qry_result
     
+    def get_location_stations2(self, locations = 'all'):
+        
+        # get a list of LocationIDs for the query
+        locs = self.get_locations()
+        if locations == 'all':
+            locs = locs.index
+        elif isinstance(locations, list):
+            locs = locs.loc[locs['LocationName'].isin(locations)].index
+        elif isinstance(locations, str):
+            locs = locs.loc[locs['LocationName'] == locations].index
+        else:
+            raise TypeError(f'Location: Unsupported object type, expected str or list, not {type(locations)}')
+            
+        if len(locs) == 0:
+            raise ValueError(f"None of given locations found in database.")
+        
+        qry6 = '''SELECT locations_stations.*, date(min(Timestamp)) AS first_date, date(max(Timestamp)) AS last_date 
+          FROM locations_stations 
+          INNER JOIN KNMI_data ON locations_stations.Parameter = KNMI_data.Parameter AND locations_stations.StationId=KNMI_data.StationId
+          GROUP BY locations_stations.LocationId, locations_stations.StationId, locations_stations.Parameter;'''
+        
+        with sqlite3.connect(self.db_path) as conn:      
+            qry_result = pd.read_sql_query(qry6, conn)
+
+        qry_result = qry_result[qry_result['LocationId'].isin(locs)]
+
+        return qry_result  
+          
     def add_data(self, StatID, Parameter, timeseries):
         """
         Adds one or more records to the database
